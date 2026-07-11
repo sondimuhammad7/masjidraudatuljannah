@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keuangan Masjid Raudatul Janah</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+body{
+    font-family:Arial,sans-serif;
+    background:#f4f6f8;
+    margin:0;
+}
+header{
+    background:#0f766e;
+    color:white;
+    text-align:center;
+    padding:20px;
+}
+.container{
+    width:95%;
+    max-width:1100px;
+    margin:auto;
+    padding:20px;
+}
+.card{
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    margin-bottom:20px;
+    box-shadow:0 2px 5px rgba(0,0,0,.1);
+}
+input,select,textarea{
+    width:100%;
+    padding:10px;
+    margin-top:5px;
+    margin-bottom:10px;
+}
+button{
+    background:#0f766e;
+    color:white;
+    border:none;
+    padding:10px 15px;
+    cursor:pointer;
+    border-radius:5px;
+}
+button:hover{
+    background:#115e59;
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+th,td{
+    border:1px solid #ddd;
+    padding:10px;
+}
+th{
+    background:#0f766e;
+    color:white;
+}
+.summary{
+    display:flex;
+    gap:20px;
+    flex-wrap:wrap;
+}
+.box{
+    flex:1;
+    background:white;
+    padding:15px;
+    border-radius:10px;
+    text-align:center;
+}
+footer{
+    text-align:center;
+    padding:15px;
+    color:white;
+    background:#0f766e;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>🕌 Masjid Raudatul Janah</h1>
+<p>Sistem Keuangan Masjid</p>
+</header>
+
+<div class="container">
+
+<div class="summary">
+
+<div class="box">
+<h3>Total Pemasukan</h3>
+<h2 id="totalMasuk">Rp 0</h2>
+</div>
+
+<div class="box">
+<h3>Total Pengeluaran</h3>
+<h2 id="totalKeluar">Rp 0</h2>
+</div>
+
+<div class="box">
+<h3>Saldo</h3>
+<h2 id="saldo">Rp 0</h2>
+</div>
+
+</div>
+
+<div class="card">
+<h2>Tambah Transaksi</h2>
+
+<input type="date" id="tanggal">
+
+<select id="jenis">
+<option value="Pemasukan">Pemasukan</option>
+<option value="Pengeluaran">Pengeluaran</option>
+</select>
+
+<input type="text" id="keterangan" placeholder="Keterangan">
+
+<input type="number" id="nominal" placeholder="Nominal">
+
+<button id="btnSimpan" onclick="simpan()">Simpan</button>
+
+<button onclick="batalEdit()" style="background:#6b7280;">Batal</button>
+
+<button onclick="exportPDF()">Export PDF</button>
+
+</div>
+
+<div class="card">
+<h2>Grafik Keuangan</h2>
+<canvas id="grafikKas"></canvas>
+</div>
+
+<div class="card">
+<h2>Riwayat Transaksi</h2>
+
+<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;">
+<input type="text" id="cari" placeholder="Cari keterangan..." style="flex:2; min-width:150px;" oninput="tampil()">
+<select id="filterJenis" style="flex:1; min-width:120px;" onchange="tampil()">
+<option value="Semua">Semua Jenis</option>
+<option value="Pemasukan">Pemasukan</option>
+<option value="Pengeluaran">Pengeluaran</option>
+</select>
+<input type="date" id="filterDari" style="flex:1; min-width:130px;" onchange="tampil()">
+<input type="date" id="filterSampai" style="flex:1; min-width:130px;" onchange="tampil()">
+<button onclick="resetFilter()" style="flex:0; white-space:nowrap;">Reset Filter</button>
+</div>
+
+<table>
+
+<thead>
+<tr>
+<th>Tanggal</th>
+<th>Jenis</th>
+<th>Keterangan</th>
+<th>Nominal</th>
+<th>Aksi</th>
+</tr>
+</thead>
+
+<tbody id="tabelData"></tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<footer>
+© 2026 Masjid Raudatul Janah
+</footer>
+
+<script>
+
+let data = JSON.parse(localStorage.getItem("transaksi")) || [];
+let editIndex = null;
+
+function formatRupiah(nilai){
+return "Rp " + nilai.toLocaleString("id-ID");
+}
+
+function simpan(){
+
+let transaksi={
+tanggal:document.getElementById("tanggal").value,
+jenis:document.getElementById("jenis").value,
+keterangan:document.getElementById("keterangan").value,
+nominal:Number(document.getElementById("nominal").value)
+};
+
+if(editIndex !== null){
+data[editIndex] = transaksi;
+editIndex = null;
+document.getElementById("btnSimpan").innerText = "Simpan";
+}else{
+data.push(transaksi);
+}
+
+localStorage.setItem(
+"transaksi",
+JSON.stringify(data)
+);
+
+resetForm();
+tampil();
+
+}
+
+function resetForm(){
+
+document.getElementById("tanggal").value="";
+document.getElementById("jenis").value="Pemasukan";
+document.getElementById("keterangan").value="";
+document.getElementById("nominal").value="";
+
+}
+
+function edit(idx){
+
+let item = data[idx];
+
+document.getElementById("tanggal").value = item.tanggal;
+document.getElementById("jenis").value = item.jenis;
+document.getElementById("keterangan").value = item.keterangan;
+document.getElementById("nominal").value = item.nominal;
+
+editIndex = idx;
+
+document.getElementById("btnSimpan").innerText = "Update Transaksi";
+
+window.scrollTo({top:0, behavior:"smooth"});
+
+}
+
+function batalEdit(){
+
+editIndex = null;
+
+document.getElementById("btnSimpan").innerText = "Simpan";
+
+resetForm();
+
+}
+
+function hapus(idx){
+
+if(confirm("Yakin ingin menghapus transaksi ini?")){
+
+data.splice(idx,1);
+
+localStorage.setItem(
+"transaksi",
+JSON.stringify(data)
+);
+
+if(editIndex === idx){
+batalEdit();
+}
+
+tampil();
+
+}
+
+}
+
+function getFilteredData(){
+
+let cari = document.getElementById("cari").value.toLowerCase();
+let jenisFilter = document.getElementById("filterJenis").value;
+let dari = document.getElementById("filterDari").value;
+let sampai = document.getElementById("filterSampai").value;
+
+return data
+
+.map((item, idx)=>({...item, _idx:idx}))
+
+.filter(item=>{
+
+let cocokCari = item.keterangan.toLowerCase().includes(cari);
+let cocokJenis = (jenisFilter=="Semua") || (item.jenis==jenisFilter);
+let cocokDari = (!dari) || (item.tanggal >= dari);
+let cocokSampai = (!sampai) || (item.tanggal <= sampai);
+
+return cocokCari && cocokJenis && cocokDari && cocokSampai;
+
+});
+
+}
+
+function resetFilter(){
+
+document.getElementById("cari").value="";
+document.getElementById("filterJenis").value="Semua";
+document.getElementById("filterDari").value="";
+document.getElementById("filterSampai").value="";
+
+tampil();
+
+}
+
+function tampil(){
+
+let tbody=document.getElementById("tabelData");
+
+tbody.innerHTML="";
+
+let masuk=0;
+let keluar=0;
+
+data.forEach(item=>{
+
+if(item.jenis=="Pemasukan"){
+masuk+=item.nominal;
+}else{
+keluar+=item.nominal;
+}
+
+});
+
+let filtered = getFilteredData();
+
+if(filtered.length===0){
+tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#888;">Tidak ada transaksi ditemukan</td></tr>`;
+}else{
+filtered.forEach(item=>{
+
+tbody.innerHTML += `
+<tr>
+<td>${item.tanggal}</td>
+<td>${item.jenis}</td>
+<td>${item.keterangan}</td>
+<td>${formatRupiah(item.nominal)}</td>
+<td style="white-space:nowrap;">
+<button onclick="edit(${item._idx})" style="background:#2563eb; padding:5px 10px; font-size:12px; margin-right:5px;">Edit</button>
+<button onclick="hapus(${item._idx})" style="background:#dc2626; padding:5px 10px; font-size:12px;">Hapus</button>
+</td>
+</tr>
+`;
+
+});
+}
+
+document.getElementById("totalMasuk").innerHTML =
+formatRupiah(masuk);
+
+document.getElementById("totalKeluar").innerHTML =
+formatRupiah(keluar);
+
+document.getElementById("saldo").innerHTML =
+formatRupiah(masuk-keluar);
+
+buatGrafik(masuk,keluar);
+
+}
+
+let chart;
+
+function buatGrafik(masuk,keluar){
+
+let ctx =
+document.getElementById("grafikKas");
+
+if(chart){
+chart.destroy();
+}
+
+chart = new Chart(ctx,{
+type:'bar',
+data:{
+labels:['Pemasukan','Pengeluaran'],
+datasets:[{
+data:[masuk,keluar],
+backgroundColor:[
+'green',
+'red'
+]
+}]
+}
+});
+
+}
+
+const bulanSingkat = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+const bulanPanjang = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+
+function formatTanggalPendek(tanggalStr){
+
+if(!tanggalStr) return "";
+
+let bagian = tanggalStr.split("-");
+let tahun = bagian[0];
+let bulan = parseInt(bagian[1],10)-1;
+let hari = parseInt(bagian[2],10);
+
+return `${hari} ${bulanSingkat[bulan]} ${tahun.slice(2)}`;
+
+}
+
+function formatTanggalPanjang(dateObj){
+
+return `${dateObj.getDate()} ${bulanPanjang[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+
+}
+
+function formatAngka(nilai){
+return nilai.toLocaleString("id-ID");
+}
+
+function buatBarisTabel(items){
+
+let rows = items.map((item,idx)=>[
+String(idx+1),
+formatTanggalPendek(item.tanggal),
+item.keterangan,
+formatAngka(item.nominal)
+]);
+
+while(rows.length < 10){
+rows.push([String(rows.length+1), "", "", ""]);
+}
+
+return rows;
+
+}
+
+async function exportPDF(){
+
+const { jsPDF } = window.jspdf;
+
+const doc = new jsPDF();
+
+let filtered = getFilteredData();
+let pemasukan = filtered.filter(item=>item.jenis=="Pemasukan");
+let pengeluaran = filtered.filter(item=>item.jenis=="Pengeluaran");
+
+let totalMasuk = pemasukan.reduce((total,item)=>total+item.nominal,0);
+let totalKeluar = pengeluaran.reduce((total,item)=>total+item.nominal,0);
+let saldoKas = totalMasuk - totalKeluar;
+
+const pageWidth = doc.internal.pageSize.getWidth();
+const marginKiri = 14;
+const lebarTabel = pageWidth - (marginKiri*2);
+
+doc.setFont("helvetica","bold");
+doc.setFontSize(13);
+doc.text("LAPORAN KEUANGAN MINGGUAN", pageWidth/2, 15, {align:"center"});
+doc.text("MASJID RAUDHATUL JANNAH", pageWidth/2, 22, {align:"center"});
+
+doc.setFont("helvetica","normal");
+doc.setFontSize(10);
+doc.text(formatTanggalPanjang(new Date()), pageWidth/2, 29, {align:"center"});
+
+let kolomLebar = {
+0:{cellWidth:12, halign:'center'},
+1:{cellWidth:22, halign:'center'},
+2:{cellWidth:lebarTabel-12-22-30},
+3:{cellWidth:30, halign:'right'}
+};
+
+doc.autoTable({
+startY: 35,
+head: [
+[{content:"PEMASUKAN", colSpan:4, styles:{halign:'center', fontStyle:'bold', fillColor:[255,255,255], textColor:0}}],
+["NO","TANGGAL","KETERANGAN","JUMLAH"]
+],
+body: buatBarisTabel(pemasukan),
+foot: [[
+{content:"JUMLAH PEMASUKAN", colSpan:3, styles:{halign:'center', fontStyle:'bold'}},
+{content: formatAngka(totalMasuk), styles:{halign:'right', fontStyle:'bold'}}
+]],
+theme:'grid',
+styles:{fontSize:9, cellPadding:2, lineColor:[0,0,0], lineWidth:0.1, textColor:0},
+headStyles:{fillColor:[255,255,255], textColor:0, lineColor:[0,0,0], lineWidth:0.1},
+footStyles:{fillColor:[255,255,255], textColor:0, lineColor:[0,0,0], lineWidth:0.1},
+columnStyles: kolomLebar,
+margin:{left:marginKiri, right:marginKiri}
+});
+
+let posisiY = doc.lastAutoTable.finalY + 8;
+
+doc.autoTable({
+startY: posisiY,
+head: [
+[{content:"PENGELUARAN", colSpan:4, styles:{halign:'center', fontStyle:'bold', fillColor:[255,255,255], textColor:0}}],
+["NO","TANGGAL","KETERANGAN","JUMLAH"]
+],
+body: buatBarisTabel(pengeluaran),
+foot: [[
+{content:"JUMLAH PENGELUARAN", colSpan:3, styles:{halign:'center', fontStyle:'bold'}},
+{content: formatAngka(totalKeluar), styles:{halign:'right', fontStyle:'bold'}}
+]],
+theme:'grid',
+styles:{fontSize:9, cellPadding:2, lineColor:[0,0,0], lineWidth:0.1, textColor:0},
+headStyles:{fillColor:[255,255,255], textColor:0, lineColor:[0,0,0], lineWidth:0.1},
+footStyles:{fillColor:[255,255,255], textColor:0, lineColor:[0,0,0], lineWidth:0.1},
+columnStyles: kolomLebar,
+margin:{left:marginKiri, right:marginKiri}
+});
+
+let posisiAkhir = doc.lastAutoTable.finalY + 8;
+
+doc.autoTable({
+startY: posisiAkhir,
+body:[[
+{content:"SALDO KAS", styles:{halign:'center', fontStyle:'bold'}},
+{content: formatAngka(saldoKas), styles:{halign:'right', fontStyle:'bold'}}
+]],
+theme:'grid',
+styles:{fontSize:10, cellPadding:3, lineColor:[0,0,0], lineWidth:0.1, textColor:0},
+columnStyles:{0:{cellWidth:lebarTabel*0.7}, 1:{cellWidth:lebarTabel*0.3, halign:'right'}},
+margin:{left:marginKiri, right:marginKiri}
+});
+
+doc.save("laporan-keuangan-mingguan.pdf");
+
+}
+
+tampil();
+
+</script>
+
+</body>
+</html>
